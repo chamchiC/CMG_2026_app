@@ -7,6 +7,10 @@
 #include <QByteArray>
 #include <QStringList>
 #include <QTimer>
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
+#include <QDateTime>
 
 /**
  * CMGSerialManager
@@ -131,6 +135,11 @@ public:
     Q_INVOKABLE void setWashoutGain(double gain); // W<값>
     Q_INVOKABLE void sendRawCommand(const QString &cmd);
 
+    // ── CSV Recording ──
+    Q_INVOKABLE void startRecording(const QString &folderPath);
+    Q_INVOKABLE void stopRecording();
+    Q_INVOKABLE bool isRecording() const;
+
 signals:
     void connectionChanged();
     void portsChanged();
@@ -167,6 +176,12 @@ private:
     QTimer      *m_dataTimeoutTimer = nullptr;
     QString      m_connectionStatus = "Disconnected";
     bool         m_dataReceived = false;     // 유효 패킷/ASCII 수신 여부
+
+    // ── CSV 녹화 ──
+    QFile       *m_csvFile = nullptr;
+    QTextStream *m_csvStream = nullptr;
+    bool         m_recording = false;
+    quint32      m_recordStartTs = 0;   // 녹화 시작 시 MCU timestamp
 
     // ── 텔레메트리 패킷 구조 (110 bytes, Little-endian) ──
     struct TelemetryData {

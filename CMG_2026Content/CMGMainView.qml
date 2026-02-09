@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtCharts
+import QtQuick.Dialogs
 
 Rectangle {
     id: root
@@ -47,8 +48,12 @@ Rectangle {
     property bool lampStandard: false
     property bool lampPerformance: false
 
-    // ── 앱 시작 시 자동 시리얼 연결 ──
+    // ── 앱 시작 시 자동 시리얼 연결 + 데이터 폴더 생성 ──
     Component.onCompleted: {
+        // 데이터 폴더 생성 (fileLogger.ensureDataFolder → C++에서 처리)
+        if (fileLogger)
+            fileLogger.ensureDataFolder()
+
         if (serialManager) {
             serialManager.refreshPorts()
             var ports = serialManager.availablePorts
@@ -79,7 +84,7 @@ Rectangle {
         function onLogReceived(message) {
             var formatted = formatLog(message)
             console.log("SerialLog:", formatted)
-            appendLog(message)
+            classifyAndAppend(message)
         }
     }
 
@@ -87,8 +92,11 @@ Rectangle {
     Timer {
         id: rpmSendTimer; interval: 300
         onTriggered: {
-            if (serialManager && serialManager.connected)
-                serialManager.sendRPM(Number(rpmField.text))
+            if (serialManager && serialManager.connected) {
+                var rpm = Number(rpmField.text)
+                serialManager.sendRPM(rpm)
+                appendToLog(rpmLogModel, "TX: R" + rpm)
+            }
         }
     }
 
@@ -96,10 +104,12 @@ Rectangle {
     Timer {
         id: pidSendTimer; interval: 500
         onTriggered: {
-            if (serialManager && serialManager.connected)
-                serialManager.setBalancingPID(
-                    Number(kpField.text), Number(kiField.text),
-                    Number(kdField.text), Number(gainField.text))
+            if (serialManager && serialManager.connected) {
+                var kp = Number(kpField.text), ki = Number(kiField.text)
+                var kd = Number(kdField.text), g = Number(gainField.text)
+                serialManager.setBalancingPID(kp, ki, kd, g)
+                appendToLog(pidLogModel, "TX: K" + kp + "," + ki + "," + kd + "," + g)
+            }
         }
     }
 
@@ -223,30 +233,69 @@ Rectangle {
         }
     }
 
-    // ── 설정 팝업 ──
+    // ── 설정 팝업 (4칼럼 로그) ──
     Popup {
         id: settingsPopup
-        x: root.width - 340; y: 55
-        width: 320; padding: 16
+        x: (root.width - 1200) / 2; y: 55
+        width: 1200; padding: 12
         modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: {
+            Qt.callLater(function() {
+                rpmLogView.positionViewAtEnd()
+                pidLogView.positionViewAtEnd()
+                rxLogView.positionViewAtEnd()
+                pktLogView.positionViewAtEnd()
+            })
+        }
         background: Rectangle { color: colPanel; radius: 0; border.color: colAccent; border.width: 1 }
         Column {
-            spacing: 12; width: parent.width
-            Text { text: "[ SETTINGS ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
-            Rectangle {
-                width: parent.width; height: 220; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
-                ListView {
-                    id: logListView; anchors.fill: parent; anchors.margins: 8
-                    clip: true; model: logModel
-                    delegate: Text {
-                        width: logListView.width
-                        text: modelData; color: colAccent; font.pixelSize: 11; font.family: monoFont
-                        wrapMode: Text.Wrap
+            spacing: 10; width: parent.width
+            // ── 헤더 ──
+            Row {
+                spacing: 0; width: parent.width
+                Text { width: parent.width / 4; text: "[ RPM TX ]"; font.pixelSize: 16; font.bold: true; font.family: monoFont; color: colAccent; horizontalAlignment: Text.AlignHCenter }
+                Text { width: parent.width / 4; text: "[ PID TX ]"; font.pixelSize: 16; font.bold: true; font.family: monoFont; color: colAccent; horizontalAlignment: Text.AlignHCenter }
+                Text { width: parent.width / 4; text: "[ RX ]"; font.pixelSize: 16; font.bold: true; font.family: monoFont; color: colAccent; horizontalAlignment: Text.AlignHCenter }
+                Text { width: parent.width / 4; text: "[ PKT ]"; font.pixelSize: 16; font.bold: true; font.family: monoFont; color: colAccent; horizontalAlignment: Text.AlignHCenter }
+            }
+            // ── 4칼럼 로그 영역 ──
+            Row {
+                spacing: 6; width: parent.width
+                // RPM TX
+                Rectangle {
+                    width: (parent.width - 18) / 4; height: 400; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
+                    ListView {
+                        id: rpmLogView; anchors.fill: parent; anchors.margins: 6; clip: true; model: rpmLogModel
+                        delegate: Text { width: rpmLogView.width; text: modelData; color: "#f0a500"; font.pixelSize: 11; font.family: monoFont; wrapMode: Text.Wrap }
                     }
-                    onCountChanged: Qt.callLater(positionViewAtEnd)
+                }
+                // PID TX
+                Rectangle {
+                    width: (parent.width - 18) / 4; height: 400; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
+                    ListView {
+                        id: pidLogView; anchors.fill: parent; anchors.margins: 6; clip: true; model: pidLogModel
+                        delegate: Text { width: pidLogView.width; text: modelData; color: "#80cbc4"; font.pixelSize: 11; font.family: monoFont; wrapMode: Text.Wrap }
+                    }
+                }
+                // RX
+                Rectangle {
+                    width: (parent.width - 18) / 4; height: 400; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
+                    ListView {
+                        id: rxLogView; anchors.fill: parent; anchors.margins: 6; clip: true; model: rxLogModel
+                        delegate: Text { width: rxLogView.width; text: modelData; color: colText; font.pixelSize: 11; font.family: monoFont; wrapMode: Text.Wrap }
+                    }
+                }
+                // PKT
+                Rectangle {
+                    width: (parent.width - 18) / 4; height: 400; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
+                    ListView {
+                        id: pktLogView; anchors.fill: parent; anchors.margins: 6; clip: true; model: pktLogModel
+                        delegate: Text { width: pktLogView.width; text: modelData; color: "#c0c0c0"; font.pixelSize: 11; font.family: monoFont; wrapMode: Text.Wrap }
+                    }
                 }
             }
+            // ── 닫기 버튼 ──
             Rectangle {
                 width: 90; height: 30; radius: 0; color: closeBtnArea.pressed ? colBtnHover : colBtn
                 border.color: colInputBorder; border.width: 1
@@ -257,11 +306,45 @@ Rectangle {
         }
     }
 
-    // ── 로그 모델 ──
-    ListModel { id: logModel }
-    function appendLog(msg) {
-        logModel.append({"modelData": formatLog(msg)})
-        if (logModel.count > 100) logModel.remove(0)
+    // ── 로그 모델 (4개) ──
+    ListModel { id: rpmLogModel }
+    ListModel { id: pidLogModel }
+    ListModel { id: rxLogModel }
+    ListModel { id: pktLogModel }
+
+    function appendToLog(model, msg) {
+        model.append({"modelData": msg})
+        if (model.count > 100) model.remove(0)
+        if (settingsPopup.opened) {
+            if (model === rpmLogModel) Qt.callLater(rpmLogView.positionViewAtEnd)
+            else if (model === pidLogModel) Qt.callLater(pidLogView.positionViewAtEnd)
+            else if (model === rxLogModel) Qt.callLater(rxLogView.positionViewAtEnd)
+            else if (model === pktLogModel) Qt.callLater(pktLogView.positionViewAtEnd)
+        }
+    }
+    function classifyAndAppend(msg) {
+        var formatted = formatLog(msg)
+        // PKT 로그 → PKT 칼럼
+        if (msg.indexOf("PKT #") === 0) {
+            appendToLog(pktLogModel, msg); return
+        }
+        // JSON에서 detail 필드로 분류
+        var idx = msg.indexOf('{')
+        if (idx >= 0) {
+            try {
+                var obj = JSON.parse(msg.substring(idx))
+                var d = (obj.detail || "").toUpperCase()
+                if (d.indexOf("CMD:R") >= 0 || d.indexOf("RPM") >= 0) {
+                    appendToLog(rpmLogModel, formatted); return
+                }
+                if (d.indexOf("CMD:K") >= 0 || d.indexOf("CMD:B") >= 0 || d.indexOf("CMD:W") >= 0
+                    || d.indexOf("BALANCING") >= 0 || d.indexOf("PID") >= 0) {
+                    appendToLog(pidLogModel, formatted); return
+                }
+            } catch(e) {}
+        }
+        // 나머지 전부 RX (RX bytes, CHECKSUM FAIL, Buffer overflow, ASCII 등)
+        appendToLog(rxLogModel, formatted)
     }
     function formatLog(msg) {
         // JSON 메시지 감지 및 포맷
@@ -537,10 +620,15 @@ Rectangle {
                                     serialManager.sendRPM(Number(rpmField.text))
                                     serialManager.setBalancingPID(Number(kpField.text), Number(kiField.text), Number(kdField.text), Number(gainField.text))
                                     serialManager.startBalancing()
+                                    serialManager.startRecording(dataFileField.text)
+                                    appendToLog(pidLogModel, "TX: B1 (START)")
                                 }
                             } else {
-                                if (serialManager && serialManager.connected)
+                                if (serialManager && serialManager.connected) {
                                     serialManager.stopBalancing()
+                                    serialManager.stopRecording()
+                                    appendToLog(pidLogModel, "TX: B0 (STOP)")
+                                }
                             }
                             root.isRunning = !root.isRunning
                         }
@@ -552,15 +640,26 @@ Rectangle {
                     width: 40; height: 40; radius: 0; color: browseBtnArea.pressed ? colBtnHover : colBtn
                     border.color: colInputBorder; border.width: 1
                     Text { anchors.centerIn: parent; text: "..."; font.pixelSize: 16; font.family: monoFont; color: colText }
-                    MouseArea { id: browseBtnArea; anchors.fill: parent }
+                    MouseArea { id: browseBtnArea; anchors.fill: parent; onClicked: folderDialog.open() }
                 }
                 TextField {
+                    id: dataFileField
                     anchors.left: dataFileLabel.right; anchors.leftMargin: 10
                     anchors.right: browseBtn.left; anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 40; font.pixelSize: 18; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
-                    color: colText
+                    height: 40; font.pixelSize: 14; font.family: monoFont; horizontalAlignment: Text.AlignLeft
+                    text: fileLogger ? fileLogger.dataFolderPath() : ""
+                    color: colText; readOnly: true
                     background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                }
+                FolderDialog {
+                    id: folderDialog
+                    title: "Select Data Folder"
+                    currentFolder: dataFileField.text ? ("file:///" + dataFileField.text) : ""
+                    onAccepted: {
+                        var path = selectedFolder.toString().replace("file:///", "")
+                        dataFileField.text = path
+                    }
                 }
             }
         }
@@ -585,6 +684,7 @@ Rectangle {
                         id: kpField; width: 75; height: 40; text: "50"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
                         color: colAccent
                         background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                        onAccepted: pidSendTimer.restart()
                     }
                     Column {
                         spacing: 0
@@ -607,6 +707,7 @@ Rectangle {
                         id: kiField; width: 75; height: 40; text: "0.03"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
                         color: colAccent
                         background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                        onAccepted: pidSendTimer.restart()
                     }
                     Column {
                         spacing: 0
@@ -629,6 +730,7 @@ Rectangle {
                         id: kdField; width: 75; height: 40; text: "20"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
                         color: colAccent
                         background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                        onAccepted: pidSendTimer.restart()
                     }
                     Column {
                         spacing: 0
@@ -654,6 +756,7 @@ Rectangle {
                         id: gainField; width: 75; height: 40; text: "0.03"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
                         color: colAccent
                         background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                        onAccepted: pidSendTimer.restart()
                     }
                     Column {
                         spacing: 0

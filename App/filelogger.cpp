@@ -1,10 +1,13 @@
 #include "filelogger.h"
 #include <QDebug>
+#include <QStandardPaths>
 
 FileLogger::FileLogger(QObject *parent)
     : QObject(parent)
     , m_active(false)
 {
+    m_dataDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                + "/CMG_2026_app/data";
 }
 
 FileLogger::~FileLogger()
@@ -86,4 +89,20 @@ void FileLogger::closeAll()
     m_files.clear();
 
     m_active = false;
+}
+
+void FileLogger::ensureDataFolder()
+{
+    QDir dir;
+    if (!dir.exists(m_dataDir)) {
+        if (dir.mkpath(m_dataDir))
+            qDebug() << "FileLogger: Created data folder:" << m_dataDir;
+        else
+            qWarning() << "FileLogger: Failed to create data folder:" << m_dataDir;
+    }
+}
+
+QString FileLogger::dataFolderPath() const
+{
+    return m_dataDir;
 }

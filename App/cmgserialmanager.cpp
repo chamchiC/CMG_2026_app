@@ -217,8 +217,12 @@ void CMGSerialManager::onReadyRead()
 
     // 디버그: 수신 바이트 수 (첫 수신 시만 표시, 이후 100패킷마다)
     m_totalBytesReceived += incoming.size();
-    if (m_totalBytesReceived == incoming.size() || m_packetCount % 100 == 0)
-        qWarning() << "RX:" << incoming.size() << "bytes, total:" << m_totalBytesReceived << "buf:" << m_buffer.size();
+    if (m_totalBytesReceived == incoming.size() || m_packetCount % 100 == 0) {
+        QString rxMsg = QString("RX: %1 bytes, total: %2, buf: %3")
+                            .arg(incoming.size()).arg(m_totalBytesReceived).arg(m_buffer.size());
+        qWarning().noquote() << rxMsg;
+        emit logReceived(rxMsg);
+    }
 
     // 버퍼 오버플로 방지 (약 90 패킷분)
     if (m_buffer.size() > 10000) {
@@ -233,11 +237,13 @@ void CMGSerialManager::onReadyRead()
             }
         }
         if (lastMagic >= 0) {
-            qWarning() << "CMGSerialManager: Buffer overflow, keeping"
-                       << (m_buffer.size() - lastMagic) << "bytes from last magic";
+            QString msg = QString("Buffer overflow, keeping %1 bytes").arg(m_buffer.size() - lastMagic);
+            qWarning().noquote() << "CMGSerialManager:" << msg;
+            emit logReceived(msg);
             m_buffer = m_buffer.mid(lastMagic);
         } else {
             qWarning() << "CMGSerialManager: Buffer overflow, clearing";
+            emit logReceived("Buffer overflow, clearing");
             m_buffer.clear();
         }
         m_asciiCarry.clear();
@@ -421,19 +427,25 @@ void CMGSerialManager::processBuffer()
                     emit logReceived("Connected: " + m_lastPortName + " @ " + QString::number(m_lastBaudRate));
                 }
 
-                if (m_packetCount <= 3 || m_packetCount % 500 == 0)
-                    qWarning() << "PKT #" << m_packetCount
-                             << "ts=" << m_telemetry.timestampMs
-                             << "roll=" << m_telemetry.roll
-                             << "gimbal=" << m_telemetry.gimbalAngle
-                             << (checksumFull == expected ? "(magic incl)" : "(magic excl)");
+                if (m_packetCount <= 3 || m_packetCount % 500 == 0) {
+                    QString pktMsg = QString("PKT #%1 ts=%2 roll=%3 gimbal=%4 %5")
+                        .arg(m_packetCount).arg(m_telemetry.timestampMs)
+                        .arg(m_telemetry.roll, 0, 'f', 2).arg(m_telemetry.gimbalAngle, 0, 'f', 1)
+                        .arg(checksumFull == expected ? "(magic incl)" : "(magic excl)");
+                    qWarning().noquote() << pktMsg;
+                    emit logReceived(pktMsg);
+                }
             } else {
                 m_checksumFails++;
-                if (m_checksumFails <= 5)
-                    qWarning() << "CHECKSUM FAIL #" << m_checksumFails
-                             << "expected:" << Qt::hex << expected
-                             << "full:" << checksumFull
-                             << "noMagic:" << checksumNoMagic;
+                if (m_checksumFails <= 5) {
+                    QString failMsg = QString("CHECKSUM FAIL #%1 expected:%2 full:%3 noMagic:%4")
+                        .arg(m_checksumFails)
+                        .arg(expected, 2, 16, QChar('0'))
+                        .arg(checksumFull, 2, 16, QChar('0'))
+                        .arg(checksumNoMagic, 2, 16, QChar('0'));
+                    qWarning().noquote() << failMsg;
+                    emit logReceived(failMsg);
+                }
                 m_buffer = m_buffer.mid(1);  // 1바이트 건너뛰고 재동기
             }
             continue;
@@ -513,6 +525,28 @@ void CMGSerialManager::parseTelemetryPacket(const QByteArray &pkt)
 
     m_telemetry.commBits = static_cast<quint8>(d[108]);
 
+    // CSV 녹화: 매 패킷마다 기록
+    if (m_recording && m_csvStream) {
+        quint32 elapsed = m_telemetry.timestampMs - m_recordStartTs;
+        int mins = (elapsed / 60000) % 100;
+        int secs = (elapsed / 1000) % 60;
+        int ms   = elapsed % 1000;
+        QString timeStr = QString("%1:%2.%3")
+            .arg(mins, 2, 10, QChar('0'))
+            .arg(secs, 2, 10, QChar('0'))
+            .arg(ms, 3, 10, QChar('0'));
+        double torque = (m_telemetry.wheel1Rpm / 1000.0) * m_telemetry.gimbalVelocity;
+        *m_csvStream << timeStr << ","
+                     << m_telemetry.timestampMs << ","
+                     << QString::number(m_telemetry.roll, 'f', 4) << ","
+                     << QString::number(m_telemetry.gyroX, 'f', 4) << ","
+                     << QString::number(m_telemetry.gimbalAngle, 'f', 4) << ","
+                     << QString::number(m_telemetry.gimbalVelocity, 'f', 4) << ","
+                     << QString::number(torque, 'f', 4) << ","
+                     << m_telemetry.wheel1Rpm << ","
+                     << m_telemetry.wheel2Rpm << "\n";
+    }
+
     emit telemetryUpdated();
 }
 
@@ -564,6 +598,64 @@ double CMGSerialManager::wheelKd() const { return m_telemetry.wheelKd; }
 int     CMGSerialManager::commBits()    const { return m_telemetry.commBits; }
 quint32 CMGSerialManager::timestampMs() const { return m_telemetry.timestampMs; }
 int     CMGSerialManager::packetCount() const { return m_packetCount; }
+
+// ═══════════════════════════════════════════════
+// CSV Recording
+// ═══════════════════════════════════════════════
+
+void CMGSerialManager::startRecording(const QString &folderPath)
+{
+    if (m_recording)
+        stopRecording();
+
+    QDir dir;
+    if (!dir.exists(folderPath))
+        dir.mkpath(folderPath);
+
+    QString fileName = QDateTime::currentDateTime().toString("yyyy-MM-dd_hhmmss") + ".csv";
+    QString filePath = folderPath + "/" + fileName;
+
+    m_csvFile = new QFile(filePath, this);
+    if (m_csvFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
+        m_csvStream = new QTextStream(m_csvFile);
+        *m_csvStream << "time,timestamp_ms,roll_angle,roll_velocity,gimbal_angle,gimbal_velocity,torque,wheel_rpm1,wheel_rpm2\n";
+        m_csvStream->flush();
+        m_recording = true;
+        m_recordStartTs = m_telemetry.timestampMs;
+        qWarning() << "CMGSerialManager: Recording started -" << filePath;
+        emit logReceived("Recording: " + filePath);
+    } else {
+        qWarning() << "CMGSerialManager: Failed to create CSV -" << filePath;
+        emit logReceived("Recording failed: " + filePath);
+        delete m_csvFile;
+        m_csvFile = nullptr;
+    }
+}
+
+void CMGSerialManager::stopRecording()
+{
+    if (!m_recording)
+        return;
+
+    m_recording = false;
+    if (m_csvStream) {
+        m_csvStream->flush();
+        delete m_csvStream;
+        m_csvStream = nullptr;
+    }
+    if (m_csvFile) {
+        m_csvFile->close();
+        qWarning() << "CMGSerialManager: Recording stopped -" << m_csvFile->fileName();
+        emit logReceived("Recording stopped: " + m_csvFile->fileName());
+        delete m_csvFile;
+        m_csvFile = nullptr;
+    }
+}
+
+bool CMGSerialManager::isRecording() const
+{
+    return m_recording;
+}
 
 // ═══════════════════════════════════════════════
 // Auto-Reconnect

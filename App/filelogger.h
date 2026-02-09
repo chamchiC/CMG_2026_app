@@ -21,12 +21,15 @@ public:
     Q_INVOKABLE void appendData(const QString &channel, double time, double value);
     Q_INVOKABLE void endSession();
     Q_INVOKABLE QString logFolderPath() const;
+    Q_INVOKABLE void ensureDataFolder();
+    Q_INVOKABLE QString dataFolderPath() const;
 
 private:
     QMap<QString, QFile*> m_files;
     QMap<QString, QTextStream*> m_streams;
     QString m_sessionTimestamp;
     QString m_logDir;
+    QString m_dataDir;
     bool m_active;
 
     void closeAll();
