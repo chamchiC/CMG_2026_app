@@ -7,7 +7,26 @@ Rectangle {
     id: root
     width: 1920
     height: 1080
-    color: "#e8e8e8"
+    color: colBg
+
+    // ── 카본/메탈 테마 팔레트 ──
+    readonly property color colBg:         "#1c1c1c"
+    readonly property color colPanel:      "#2a2a2a"
+    readonly property color colTitleBar:   "#333333"
+    readonly property color colText:       "#e8e8e8"
+    readonly property color colAccent:     "#f0a500"
+    readonly property color colLabel:      "#c8c8c8"
+    readonly property color colInputBg:    "#1a1a1a"
+    readonly property color colInputBorder:"#555555"
+    readonly property color colBtn:        "#3a3a3a"
+    readonly property color colBtnHover:   "#505050"
+    readonly property color colChartBg:    "#141414"
+    readonly property color colGrid:       "#3a3a3a"
+    readonly property color colLampOn:     "#00ff88"
+    readonly property color colLampOff:    "#2a3a2e"
+
+    // ── 폰트 ──
+    readonly property string monoFont: "Consolas"
 
     property real rollAngleValue: 0.0
     property real gimbalAngleValue: 0.0
@@ -33,9 +52,8 @@ Rectangle {
         if (serialManager) {
             serialManager.refreshPorts()
             var ports = serialManager.availablePorts
-            // 사용 가능한 포트가 있으면 첫 번째 포트로 자동 연결
             if (ports.length > 0) {
-                portField.text = ports[ports.length - 1]  // 마지막 포트 (보통 가장 최근 연결된 장치)
+                portField.text = ports[ports.length - 1]
             }
             console.log("Auto-connect:", portField.text, baudField.text)
             serialManager.connectPort(portField.text, Number(baudField.text))
@@ -51,7 +69,6 @@ Rectangle {
             root.rollVelocityValue = serialManager.gyroX
             root.gimbalVelocityValue = serialManager.gimbalVelocity
             root.torqueValue = (serialManager.wheel1Rpm / 1000.0) * serialManager.gimbalVelocity
-            // comm_bits → 램프
             root.lampAngleSensor = (serialManager.commBits & 0x01) !== 0
             root.lampRPM1Sensor  = (serialManager.commBits & 0x02) !== 0
             root.lampRPM2Sensor  = (serialManager.commBits & 0x04) !== 0
@@ -59,10 +76,9 @@ Rectangle {
             root.lampGimbalMotor = (serialManager.commBits & 0x10) !== 0
             root.lampMainLoop    = (serialManager.commBits & 0x20) !== 0
         }
-        // 연결/에러 로그 → 제목 바 날짜 위치에 임시 표시
         function onLogReceived(message) {
-            dateTimeLabel.text = message
             console.log("SerialLog:", message)
+            appendLog(message)
         }
     }
 
@@ -86,7 +102,7 @@ Rectangle {
         }
     }
 
-    // Y축 자동 스케일: 값이 범위를 넘으면 여유(10%) 두고 확장
+    // Y축 자동 스케일
     function autoScaleY(axis, value) {
         var margin = Math.max(Math.abs(axis.max - axis.min) * 0.1, 0.1)
         if (value > axis.max) axis.max = value + margin
@@ -103,7 +119,6 @@ Rectangle {
             rollVelocitySeries.append(t, rollVelocityValue)
             gimbalVelocitySeries.append(t, gimbalVelocityValue)
             torqueSeries.append(t, torqueValue)
-            // Y축 자동 스케일
             autoScaleY(rollAngleAxisY, rollAngleValue)
             autoScaleY(gimbalAngleAxisY, gimbalAngleValue)
             autoScaleY(rollVelAxisY, rollVelocityValue)
@@ -145,7 +160,6 @@ Rectangle {
         rollAngleAxisX.min=0; rollAngleAxisX.max=20; gimbalAngleAxisX.min=0; gimbalAngleAxisX.max=20
         rollVelAxisX.min=0; rollVelAxisX.max=20; gimbalVelAxisX.min=0; gimbalVelAxisX.max=20
         torqueAxisX.min=0; torqueAxisX.max=20
-        // Y축 초기 범위 복원
         rollAngleAxisY.min=-10; rollAngleAxisY.max=10
         gimbalAngleAxisY.min=-65; gimbalAngleAxisY.max=65
         rollVelAxisY.min=-1; rollVelAxisY.max=1
@@ -158,32 +172,91 @@ Rectangle {
     // ══════════════════════════════════════
     Rectangle {
         id: titleBar
-        x: 8; y: 6; width: parent.width - 16; height: 40
-        color: "#2c2c54"; radius: 3
+        x: 8; y: 6; width: parent.width - 16; height: 44
+        color: colTitleBar; radius: 0
+        border.color: colInputBorder; border.width: 1
         Text {
             id: dateTimeLabel
-            anchors.left: parent.left; anchors.leftMargin: 12
+            anchors.left: parent.left; anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm:ss")
-            color: "#fff"; font.pixelSize: 22; font.italic: true
+            color: colLabel; font.pixelSize: 18; font.family: monoFont
         }
         Text {
             anchors.centerIn: parent
-            text: "Control Moment Gyroscope System  Ver 1.0"
-            color: "#fff"; font.pixelSize: 24; font.bold: true
+            text: "CONTROL MOMENT GYROSCOPE SYSTEM  v1.0"
+            color: colAccent; font.pixelSize: 22; font.bold: true; font.family: monoFont; font.letterSpacing: 2
+        }
+        // ── 설정 버튼 ──
+        Rectangle {
+            anchors.right: parent.right; anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32; height: 32; radius: 0
+            color: settingsBtnArea.containsMouse ? colBtnHover : "transparent"
+            border.color: settingsBtnArea.containsMouse ? colInputBorder : "transparent"; border.width: 1
+            Text {
+                anchors.centerIn: parent
+                text: "\u2699"; font.pixelSize: 20; color: colText
+            }
+            MouseArea {
+                id: settingsBtnArea; anchors.fill: parent
+                hoverEnabled: true
+                onClicked: settingsPopup.open()
+            }
         }
     }
 
+    // ── 설정 팝업 ──
+    Popup {
+        id: settingsPopup
+        x: root.width - 340; y: 55
+        width: 320; padding: 16
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle { color: colPanel; radius: 0; border.color: colAccent; border.width: 1 }
+        Column {
+            spacing: 12; width: parent.width
+            Text { text: "[ SETTINGS ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+            Rectangle {
+                width: parent.width; height: 220; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
+                ListView {
+                    id: logListView; anchors.fill: parent; anchors.margins: 8
+                    clip: true; model: logModel
+                    delegate: Text {
+                        width: logListView.width
+                        text: modelData; color: colAccent; font.pixelSize: 11; font.family: monoFont
+                        wrapMode: Text.Wrap
+                    }
+                    onCountChanged: positionViewAtEnd()
+                }
+            }
+            Rectangle {
+                width: 90; height: 30; radius: 0; color: closeBtnArea.pressed ? colBtnHover : colBtn
+                border.color: colInputBorder; border.width: 1
+                anchors.horizontalCenter: parent.horizontalCenter
+                Text { anchors.centerIn: parent; text: "CLOSE"; color: colText; font.pixelSize: 13; font.family: monoFont; font.bold: true }
+                MouseArea { id: closeBtnArea; anchors.fill: parent; onClicked: settingsPopup.close() }
+            }
+        }
+    }
+
+    // ── 로그 모델 ──
+    ListModel { id: logModel }
+    function appendLog(msg) {
+        logModel.append({"modelData": msg})
+        if (logModel.count > 100) logModel.remove(0)
+    }
+
     // ══════════════════════════════════════
-    // 좌측 (66%) - 그래프만
+    // 좌측 (66%) - 그래프
     // ══════════════════════════════════════
     GroupBox {
         id: leftArea
-        x: 8; y: 52
+        x: 8; y: 56
         width: (parent.width - 24) * 0.66
-        height: parent.height - 58
-        title: "Realtime Graph"
-        font.pixelSize: 20; font.bold: true
+        height: parent.height - 62
+        label: Text { text: "[ REALTIME GRAPH ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         GridLayout {
             anchors.fill: parent
@@ -191,175 +264,130 @@ Rectangle {
 
             ChartView {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                antialiasing: true; backgroundColor: "#fff"; legend.visible: false
-                title: "Roll Angle (θ)"; titleFont.pixelSize: 18
-                ValuesAxis { id: rollAngleAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                ValuesAxis { id: rollAngleAxisY; min: -10; max: 10; tickCount: 11; titleText: "Roll Angle (θ)"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                LineSeries { id: rollAngleSeries; color: "#1a73e8"; width: 2; axisX: rollAngleAxisX; axisY: rollAngleAxisY }
+                antialiasing: true; backgroundColor: colChartBg; legend.visible: false
+                title: "ROLL ANGLE"; titleFont.pixelSize: 14; titleColor: colLabel; titleFont.family: monoFont
+                plotAreaColor: colChartBg
+                ValuesAxis { id: rollAngleAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                ValuesAxis { id: rollAngleAxisY; min: -10; max: 10; tickCount: 11; titleText: "Roll (deg)"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                LineSeries { id: rollAngleSeries; color: "#f0a500"; width: 2; axisX: rollAngleAxisX; axisY: rollAngleAxisY }
             }
             ChartView {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                antialiasing: true; backgroundColor: "#fff"; legend.visible: false
-                title: "Gimbal Angle (θ)"; titleFont.pixelSize: 18
-                ValuesAxis { id: gimbalAngleAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                ValuesAxis { id: gimbalAngleAxisY; min: -65; max: 65; tickCount: 9; titleText: "Gimbal Angle (θ)"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                LineSeries { id: gimbalAngleSeries; color: "#e8501a"; width: 2; axisX: gimbalAngleAxisX; axisY: gimbalAngleAxisY }
+                antialiasing: true; backgroundColor: colChartBg; legend.visible: false
+                title: "GIMBAL ANGLE"; titleFont.pixelSize: 14; titleColor: colLabel; titleFont.family: monoFont
+                plotAreaColor: colChartBg
+                ValuesAxis { id: gimbalAngleAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                ValuesAxis { id: gimbalAngleAxisY; min: -65; max: 65; tickCount: 9; titleText: "Gimbal (deg)"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                LineSeries { id: gimbalAngleSeries; color: "#e8e8e8"; width: 2; axisX: gimbalAngleAxisX; axisY: gimbalAngleAxisY }
             }
             ChartView {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                antialiasing: true; backgroundColor: "#fff"; legend.visible: false
-                title: "Roll Velocity"; titleFont.pixelSize: 18
-                ValuesAxis { id: rollVelAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                ValuesAxis { id: rollVelAxisY; min: -1; max: 1; tickCount: 11; titleText: "Roll Velocity"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                LineSeries { id: rollVelocitySeries; color: "#2e7d32"; width: 2; axisX: rollVelAxisX; axisY: rollVelAxisY }
+                antialiasing: true; backgroundColor: colChartBg; legend.visible: false
+                title: "ROLL VELOCITY"; titleFont.pixelSize: 14; titleColor: colLabel; titleFont.family: monoFont
+                plotAreaColor: colChartBg
+                ValuesAxis { id: rollVelAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                ValuesAxis { id: rollVelAxisY; min: -1; max: 1; tickCount: 11; titleText: "Roll Vel"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                LineSeries { id: rollVelocitySeries; color: "#c0c0c0"; width: 2; axisX: rollVelAxisX; axisY: rollVelAxisY }
             }
             ChartView {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                antialiasing: true; backgroundColor: "#fff"; legend.visible: false
-                title: "Gimbal Velocity"; titleFont.pixelSize: 18
-                ValuesAxis { id: gimbalVelAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                ValuesAxis { id: gimbalVelAxisY; min: -1; max: 1; tickCount: 11; titleText: "Gimbal Velocity"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                LineSeries { id: gimbalVelocitySeries; color: "#6a1b9a"; width: 2; axisX: gimbalVelAxisX; axisY: gimbalVelAxisY }
+                antialiasing: true; backgroundColor: colChartBg; legend.visible: false
+                title: "GIMBAL VELOCITY"; titleFont.pixelSize: 14; titleColor: colLabel; titleFont.family: monoFont
+                plotAreaColor: colChartBg
+                ValuesAxis { id: gimbalVelAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                ValuesAxis { id: gimbalVelAxisY; min: -1; max: 1; tickCount: 11; titleText: "Gimbal Vel"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                LineSeries { id: gimbalVelocitySeries; color: "#d4770b"; width: 2; axisX: gimbalVelAxisX; axisY: gimbalVelAxisY }
             }
         }
     }
 
     // ══════════════════════════════════════
-    // 우측 (34%) - 고정 좌표, Design Studio에서 드래그 가능
+    // 우측 (34%) - 패널들
     // ══════════════════════════════════════
+
     // ── Main Loop ──
     GroupBox {
         id: mainLoopBox
-        x: 1270; y: 52
+        x: 1270; y: 56
         width: 640; height: 90
-        title: "Main Loop"; font.pixelSize: 20; font.bold: true
+        label: Text { text: "[ MAIN LOOP ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Row {
             anchors.fill: parent; spacing: 8
-            Text { text: "Main_Loop"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
-            // ── 포트 선택 (TextField + ▼ 드롭다운) ──
+            Text { text: "MAIN_LOOP"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
             Row {
-                spacing: 0
-                anchors.verticalCenter: parent.verticalCenter
-
+                spacing: 0; anchors.verticalCenter: parent.verticalCenter
                 TextField {
-                    id: portField
-                    width: 100; height: 34; font.pixelSize: 20
-                    text: "COM5"; readOnly: true
-                    horizontalAlignment: Text.AlignHCenter
+                    id: portField; width: 100; height: 34; font.pixelSize: 16; font.family: monoFont
+                    text: "COM5"; readOnly: true; horizontalAlignment: Text.AlignHCenter
+                    color: colAccent
+                    background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
                 }
                 Rectangle {
-                    width: 20; height: 34
-                    color: portDropArea.pressed ? "#ccc" : "#e8e8e8"
-                    border.color: "#aaa"; border.width: 1
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "▼"; font.pixelSize: 10
-                    }
-
+                    width: 22; height: 34; radius: 0; color: portDropArea.pressed ? colBtnHover : colBtn
+                    border.color: colInputBorder; border.width: 1
+                    Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 10; color: colText }
                     MouseArea {
-                        id: portDropArea
-                        anchors.fill: parent
-                        onClicked: {
-                            if (serialManager) {
-                                serialManager.refreshPorts()
-                            }
-                            portPopup.open()
-                        }
+                        id: portDropArea; anchors.fill: parent
+                        onClicked: { if (serialManager) serialManager.refreshPorts(); portPopup.open() }
                     }
                 }
-
                 Popup {
-                    id: portPopup
-                    x: 0; y: 34
-                    width: 120; padding: 2
-
+                    id: portPopup; x: 0; y: 34; width: 122; padding: 2
+                    background: Rectangle { color: colPanel; radius: 0; border.color: colAccent; border.width: 1 }
                     Column {
                         width: parent.width
                         Repeater {
                             model: serialManager ? serialManager.availablePorts : ["COM5"]
                             delegate: Rectangle {
-                                width: 116; height: 30
-                                color: portItemArea.containsMouse ? "#d0d0ff" : "#fff"
-                                border.color: "#ddd"; border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData; font.pixelSize: 18
-                                }
-
+                                width: 118; height: 30; color: portItemArea.containsMouse ? colBtnHover : colPanel
+                                border.color: colInputBorder; border.width: 1
+                                Text { anchors.centerIn: parent; text: modelData; font.pixelSize: 14; font.family: monoFont; color: colText }
                                 MouseArea {
-                                    id: portItemArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        portField.text = modelData
-                                        portPopup.close()
-                                    }
+                                    id: portItemArea; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: { portField.text = modelData; portPopup.close() }
                                 }
                             }
                         }
                     }
                 }
             }
-            Rectangle { width: 26; height: 26; radius: 3; border.color: "#333"; border.width: 1; color: root.lampMainLoop ? "#7fff00" : "#4a6741"; anchors.verticalCenter: parent.verticalCenter }
-            Text { text: "Baud Rate"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
-            // ── 보드레이트 선택 (TextField + ▼ 드롭다운) ──
-            Row {
-                spacing: 0
+            Rectangle {
+                width: 26; height: 26; radius: 0
+                border.color: colInputBorder; border.width: 2
+                color: root.lampMainLoop ? colLampOn : colLampOff
                 anchors.verticalCenter: parent.verticalCenter
-
+            }
+            Text { text: "BAUD"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+            Row {
+                spacing: 0; anchors.verticalCenter: parent.verticalCenter
                 TextField {
-                    id: baudField
-                    width: 100; height: 34; font.pixelSize: 20
-                    text: "115200"; readOnly: true
-                    horizontalAlignment: Text.AlignHCenter
+                    id: baudField; width: 100; height: 34; font.pixelSize: 16; font.family: monoFont
+                    text: "115200"; readOnly: true; horizontalAlignment: Text.AlignHCenter
+                    color: colAccent
+                    background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
                 }
                 Rectangle {
-                    width: 20; height: 34
-                    color: baudDropArea.pressed ? "#ccc" : "#e8e8e8"
-                    border.color: "#aaa"; border.width: 1
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "▼"; font.pixelSize: 10
-                    }
-
-                    MouseArea {
-                        id: baudDropArea
-                        anchors.fill: parent
-                        onClicked: baudPopup.open()
-                    }
+                    width: 22; height: 34; radius: 0; color: baudDropArea.pressed ? colBtnHover : colBtn
+                    border.color: colInputBorder; border.width: 1
+                    Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 10; color: colText }
+                    MouseArea { id: baudDropArea; anchors.fill: parent; onClicked: baudPopup.open() }
                 }
-
                 Popup {
-                    id: baudPopup
-                    x: 0; y: 34
-                    width: 120; padding: 2
-
+                    id: baudPopup; x: 0; y: 34; width: 122; padding: 2
+                    background: Rectangle { color: colPanel; radius: 0; border.color: colAccent; border.width: 1 }
                     Column {
                         width: parent.width
                         Repeater {
                             model: ["9600", "19200", "38400", "57600", "115200"]
                             delegate: Rectangle {
-                                width: 116; height: 30
-                                color: baudItemArea.containsMouse ? "#d0d0ff" : "#fff"
-                                border.color: "#ddd"; border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData; font.pixelSize: 18
-                                }
-
+                                width: 118; height: 30; color: baudItemArea.containsMouse ? colBtnHover : colPanel
+                                border.color: colInputBorder; border.width: 1
+                                Text { anchors.centerIn: parent; text: modelData; font.pixelSize: 14; font.family: monoFont; color: colText }
                                 MouseArea {
-                                    id: baudItemArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        baudField.text = modelData
-                                        baudPopup.close()
-                                    }
+                                    id: baudItemArea; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: { baudField.text = modelData; baudPopup.close() }
                                 }
                             }
                         }
@@ -372,76 +400,83 @@ Rectangle {
     // ── Realtime Sensor Data ──
     GroupBox {
         id: sensorBox
-        x: 1270; y: 148
+        x: 1270; y: 152
         width: 640; height: 122
-        title: "Realtime Sensor Data"; font.pixelSize: 20; font.bold: true
+        label: Text { text: "[ SENSOR DATA ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Grid {
             anchors.fill: parent; columns: 4; rowSpacing: 10; columnSpacing: 15
-            Text { text: "Roll Angle"; font.pixelSize: 22; width: 130 }
-            Text { text: rollAngleValue.toFixed(1) + " °"; font.pixelSize: 22; font.bold: true; width: 100; horizontalAlignment: Text.AlignRight }
-            Text { text: "Wheel RPM1"; font.pixelSize: 22; width: 140 }
-            Text { text: (serialManager ? serialManager.wheel1Rpm : 0) + " rpm"; font.pixelSize: 22; font.bold: true; width: 120; horizontalAlignment: Text.AlignRight }
-            Text { text: "Gimbal Angle"; font.pixelSize: 22; width: 130 }
-            Text { text: gimbalAngleValue.toFixed(1) + " °"; font.pixelSize: 22; font.bold: true; width: 100; horizontalAlignment: Text.AlignRight }
-            Text { text: "Wheel RPM2"; font.pixelSize: 22; width: 140 }
-            Text { text: (serialManager ? serialManager.wheel2Rpm : 0) + " rpm"; font.pixelSize: 22; font.bold: true; width: 120; horizontalAlignment: Text.AlignRight }
+            Text { text: "Roll Angle"; font.pixelSize: 18; font.family: monoFont; width: 130; color: colLabel }
+            Text { text: rollAngleValue.toFixed(1) + " \u00B0"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 100; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Wheel RPM1"; font.pixelSize: 18; font.family: monoFont; width: 140; color: colLabel }
+            Text { text: (serialManager ? serialManager.wheel1Rpm : 0) + " rpm"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 120; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Gimbal Angle"; font.pixelSize: 18; font.family: monoFont; width: 130; color: colLabel }
+            Text { text: gimbalAngleValue.toFixed(1) + " \u00B0"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 100; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Wheel RPM2"; font.pixelSize: 18; font.family: monoFont; width: 140; color: colLabel }
+            Text { text: (serialManager ? serialManager.wheel2Rpm : 0) + " rpm"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 120; horizontalAlignment: Text.AlignRight; color: colAccent }
         }
     }
 
     // ── Control System ──
     GroupBox {
         id: controlBox
-        x: 1270; y: 276
+        x: 1270; y: 280
         width: 640; height: 148
-        title: "Control System"; font.pixelSize: 20; font.bold: true
+        label: Text { text: "[ CONTROL SYSTEM ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Column {
             anchors.fill: parent; spacing: 10
             Row {
-                id: controlRow1
-                spacing: 10
-                Text { text: "Setting Wheel RPM"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
+                id: controlRow1; spacing: 10
+                Text { text: "WHEEL RPM"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
-                    spacing: 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    TextField { id: rpmField; width: 90; height: 40; text: "0"; font.pixelSize: 22; horizontalAlignment: Text.AlignHCenter; validator: IntValidator { bottom: 0; top: 10000 }
+                    spacing: 0; anchors.verticalCenter: parent.verticalCenter
+                    TextField {
+                        id: rpmField; width: 90; height: 40; text: "0"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                        color: colAccent; validator: IntValidator { bottom: 0; top: 10000 }
+                        background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
                         onAccepted: rpmSendTimer.restart()
                     }
                     Column {
                         spacing: 0
                         Rectangle {
-                            width: 20; height: 20; color: rpmUp.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: rpmUp.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25B2"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: rpmUp; anchors.fill: parent; onClicked: { rpmField.text = String(Math.min(10000, Number(rpmField.text) + 100)); rpmSendTimer.restart() } }
                         }
                         Rectangle {
-                            width: 20; height: 20; color: rpmDn.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: rpmDn.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: rpmDn; anchors.fill: parent; onClicked: { rpmField.text = String(Math.max(0, Number(rpmField.text) - 100)); rpmSendTimer.restart() } }
                         }
                     }
                 }
                 Item { width: 15; height: 1 }
-                Text { text: "Control_Factor"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
-                TextField { width: 75; height: 40; text: "2.5"; font.pixelSize: 22; horizontalAlignment: Text.AlignHCenter }
+                Text { text: "CTRL_FACTOR"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+                TextField {
+                    width: 75; height: 40; text: "2.5"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                    color: colAccent
+                    background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                }
             }
             Item {
                 width: controlRow1.implicitWidth; height: 45
-                Text { id: dataFileLabel; text: "Data File"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
+                Text { id: dataFileLabel; text: "DATA FILE"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Rectangle {
                     id: startBtn
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 130; height: 40; radius: 0
-                    color: startBtnArea.pressed ? "#ccc" : "#e8e8e8"
-                    border.color: "#aaa"; border.width: 1
-                    Text { anchors.centerIn: parent; text: root.isRunning ? "Stop Test" : "Start Test"; font.pixelSize: 22; font.bold: true }
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    width: 140; height: 40; radius: 0
+                    border.color: root.isRunning ? "#e84040" : colAccent; border.width: 2
+                    color: root.isRunning
+                        ? (startBtnArea.pressed ? "#8b0000" : "#b22222")
+                        : (startBtnArea.pressed ? "#c48800" : colBtn)
+                    Text { anchors.centerIn: parent; text: root.isRunning ? "STOP" : "START"; font.pixelSize: 18; font.bold: true; font.family: monoFont; font.letterSpacing: 2; color: root.isRunning ? "#fff" : colAccent }
                     MouseArea {
                         id: startBtnArea; anchors.fill: parent
                         onClicked: {
                             if (!root.isRunning) {
-                                // Start: 미연결 시 자동 연결 → RPM 설정 → 밸런싱 시작 (B1)
                                 if (serialManager) {
                                     if (!serialManager.connected)
                                         serialManager.connectPort(portField.text, Number(baudField.text))
@@ -450,7 +485,6 @@ Rectangle {
                                     serialManager.startBalancing()
                                 }
                             } else {
-                                // Stop: 밸런싱 정지 (B0)
                                 if (serialManager && serialManager.connected)
                                     serialManager.stopBalancing()
                             }
@@ -460,19 +494,19 @@ Rectangle {
                 }
                 Rectangle {
                     id: browseBtn
-                    anchors.right: startBtn.left; anchors.rightMargin: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 40; height: 40; radius: 0
-                    color: browseBtnArea.pressed ? "#ccc" : "#e8e8e8"
-                    border.color: "#aaa"; border.width: 1
-                    Text { anchors.centerIn: parent; text: "..."; font.pixelSize: 20 }
+                    anchors.right: startBtn.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+                    width: 40; height: 40; radius: 0; color: browseBtnArea.pressed ? colBtnHover : colBtn
+                    border.color: colInputBorder; border.width: 1
+                    Text { anchors.centerIn: parent; text: "..."; font.pixelSize: 16; font.family: monoFont; color: colText }
                     MouseArea { id: browseBtnArea; anchors.fill: parent }
                 }
                 TextField {
                     anchors.left: dataFileLabel.right; anchors.leftMargin: 10
                     anchors.right: browseBtn.left; anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 40; font.pixelSize: 22; horizontalAlignment: Text.AlignHCenter
+                    height: 40; font.pixelSize: 18; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                    color: colText
+                    background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
                 }
             }
         }
@@ -481,64 +515,77 @@ Rectangle {
     // ── Performance Metrics ──
     GroupBox {
         id: perfBox
-        x: 1270; y: 430
+        x: 1270; y: 434
         width: 640; height: 141
-        title: "Performance Metrics"; font.pixelSize: 20; font.bold: true
+        label: Text { text: "[ PERFORMANCE ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Column {
             anchors.fill: parent; spacing: 8
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter; spacing: 15
-                Text { text: "Kp"; font.pixelSize: 26; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "Kp"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
                     spacing: 0
-                    TextField { id: kpField; width: 75; height: 40; text: "50"; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter }
+                    TextField {
+                        id: kpField; width: 75; height: 40; text: "50"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                        color: colAccent
+                        background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                    }
                     Column {
                         spacing: 0
                         Rectangle {
-                            width: 20; height: 20; color: kpUp.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: kpUp.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25B2"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: kpUp; anchors.fill: parent; onClicked: { kpField.text = String(Number(kpField.text) + 1); pidSendTimer.restart() } }
                         }
                         Rectangle {
-                            width: 20; height: 20; color: kpDn.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: kpDn.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: kpDn; anchors.fill: parent; onClicked: { kpField.text = String(Math.max(0, Number(kpField.text) - 1)); pidSendTimer.restart() } }
                         }
                     }
                 }
-                Text { text: "Ki"; font.pixelSize: 26; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "Ki"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
                     spacing: 0
-                    TextField { id: kiField; width: 75; height: 40; text: "0.03"; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter }
+                    TextField {
+                        id: kiField; width: 75; height: 40; text: "0.03"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                        color: colAccent
+                        background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                    }
                     Column {
                         spacing: 0
                         Rectangle {
-                            width: 20; height: 20; color: kiUp.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: kiUp.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25B2"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: kiUp; anchors.fill: parent; onClicked: { kiField.text = String((Number(kiField.text) + 0.01).toFixed(2)); pidSendTimer.restart() } }
                         }
                         Rectangle {
-                            width: 20; height: 20; color: kiDn.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: kiDn.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: kiDn; anchors.fill: parent; onClicked: { kiField.text = String(Math.max(0, (Number(kiField.text) - 0.01)).toFixed(2)); pidSendTimer.restart() } }
                         }
                     }
                 }
-                Text { text: "Kd"; font.pixelSize: 26; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "Kd"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
                     spacing: 0
-                    TextField { id: kdField; width: 75; height: 40; text: "20"; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter }
+                    TextField {
+                        id: kdField; width: 75; height: 40; text: "20"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                        color: colAccent
+                        background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                    }
                     Column {
                         spacing: 0
                         Rectangle {
-                            width: 20; height: 20; color: kdUp.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: kdUp.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25B2"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: kdUp; anchors.fill: parent; onClicked: { kdField.text = String(Number(kdField.text) + 1); pidSendTimer.restart() } }
                         }
                         Rectangle {
-                            width: 20; height: 20; color: kdDn.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: kdDn.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: kdDn; anchors.fill: parent; onClicked: { kdField.text = String(Math.max(0, Number(kdField.text) - 1)); pidSendTimer.restart() } }
                         }
                     }
@@ -546,20 +593,24 @@ Rectangle {
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
-                Text { text: "Gimbal Reset Gain"; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "GIMBAL RESET GAIN"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
                     spacing: 0
-                    TextField { id: gainField; width: 75; height: 40; text: "0.03"; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter }
+                    TextField {
+                        id: gainField; width: 75; height: 40; text: "0.03"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
+                        color: colAccent
+                        background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
+                    }
                     Column {
                         spacing: 0
                         Rectangle {
-                            width: 20; height: 20; color: gainUp.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: gainUp.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25B2"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: gainUp; anchors.fill: parent; onClicked: { gainField.text = String((Number(gainField.text) + 0.01).toFixed(2)); pidSendTimer.restart() } }
                         }
                         Rectangle {
-                            width: 20; height: 20; color: gainDn.pressed ? "#ccc" : "#e8e8e8"; border.color: "#aaa"; border.width: 1
-                            Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 7 }
+                            width: 20; height: 20; radius: 0; color: gainDn.pressed ? colBtnHover : colBtn; border.color: colInputBorder; border.width: 1
+                            Text { anchors.centerIn: parent; text: "\u25BC"; font.pixelSize: 7; color: colAccent }
                             MouseArea { id: gainDn; anchors.fill: parent; onClicked: { gainField.text = String(Math.max(0, (Number(gainField.text) - 0.01)).toFixed(2)); pidSendTimer.restart() } }
                         }
                     }
@@ -571,23 +622,25 @@ Rectangle {
     // ── Torque Trend ──
     GroupBox {
         id: torqueBox
-        x: 1270; y: 577
-        width: 640; height: 497
-        title: "Torque Trend"; font.pixelSize: 20; font.bold: true
+        x: 1270; y: 581
+        width: 640; height: 493
+        label: Text { text: "[ TORQUE TREND ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Item {
             anchors.fill: parent
             Row {
                 anchors.top: parent.top; anchors.right: parent.right; spacing: 8; z: 1
-                Text { text: "Torque_Nm"; font.pixelSize: 24; font.bold: true }
-                Text { text: torqueValue.toFixed(2) + " Nm"; font.pixelSize: 26; font.bold: true; color: "#c62828" }
+                Text { text: "TORQUE"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colLabel }
+                Text { text: torqueValue.toFixed(2) + " Nm"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: "#e84040" }
             }
             ChartView {
                 anchors.fill: parent; anchors.topMargin: 30
-                antialiasing: true; backgroundColor: "#fff"; legend.visible: false
-                ValuesAxis { id: torqueAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                ValuesAxis { id: torqueAxisY; min: -1; max: 1; tickCount: 11; titleText: "Torque (Nm)"; labelsFont.pixelSize: 14; gridLineColor: "#ddd" }
-                LineSeries { id: torqueSeries; color: "#c62828"; width: 2; axisX: torqueAxisX; axisY: torqueAxisY }
+                antialiasing: true; backgroundColor: colChartBg; legend.visible: false
+                plotAreaColor: colChartBg; titleColor: colText
+                ValuesAxis { id: torqueAxisX; min: 0; max: 20; titleText: "Time"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                ValuesAxis { id: torqueAxisY; min: -1; max: 1; tickCount: 11; titleText: "Torque (Nm)"; labelsFont.pixelSize: 11; labelsFont.family: monoFont; gridLineColor: colGrid; labelsColor: colLabel; titleBrush: colLabel }
+                LineSeries { id: torqueSeries; color: "#e84040"; width: 2; axisX: torqueAxisX; axisY: torqueAxisY }
             }
         }
     }

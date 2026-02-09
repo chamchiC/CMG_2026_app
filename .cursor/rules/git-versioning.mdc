@@ -1,0 +1,28 @@
+---
+description: Git versioning and GitHub upload rules for this project
+alwaysApply: true
+---
+
+# Git 버전 관리 규칙
+
+## 버전 체계: vX.Y.Z
+
+| 자리 | 올리는 조건 | 하위 자리 |
+|------|------------|----------|
+| X (정식 릴리즈) | 정식 릴리즈 | Y, Z → 0으로 리셋 |
+| Y (큰 수정) | 큰 기능 추가/변경 | Z → 0으로 리셋 |
+| Z (작은 수정) | 자잘한 수정, 버그 패치 | - |
+
+예: 1.3.5 → 큰 수정 → 1.4.0 → 작은 수정 5번 → 1.4.5
+
+## GitHub 업로드 요청 시 절차
+
+1. 변경 내용의 규모 판단 (정식 / 큰 수정 / 작은 수정)
+2. 현재 최신 태그 확인 (`git tag --sort=-v:refname`)
+3. 규칙에 맞게 다음 버전 결정
+4. 실행:
+   - `git add -A`
+   - `git commit -m "변경 내용 요약"`
+   - `git push`
+   - `git tag -a vX.Y.Z -m "vX.Y.Z: 변경 내용"`
+   - `git push origin vX.Y.Z`
