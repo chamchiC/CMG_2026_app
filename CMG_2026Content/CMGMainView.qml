@@ -77,7 +77,8 @@ Rectangle {
             root.lampMainLoop    = (serialManager.commBits & 0x20) !== 0
         }
         function onLogReceived(message) {
-            console.log("SerialLog:", message)
+            var formatted = formatLog(message)
+            console.log("SerialLog:", formatted)
             appendLog(message)
         }
     }
@@ -180,7 +181,23 @@ Rectangle {
             anchors.left: parent.left; anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm:ss")
-            color: colLabel; font.pixelSize: 18; font.family: monoFont
+            color: colLabel; font.pixelSize: 16; font.family: monoFont
+        }
+        // ── 연결 상태 표시 ──
+        Text {
+            id: connStatusLabel
+            anchors.left: dateTimeLabel.right; anchors.leftMargin: 20
+            anchors.verticalCenter: parent.verticalCenter
+            text: serialManager ? serialManager.connectionStatus : "---"
+            font.pixelSize: 18; font.family: monoFont; font.bold: true
+            color: {
+                if (!serialManager) return colLabel
+                var s = serialManager.connectionStatus
+                if (s.indexOf("Connected:") === 0) return colLampOn
+                if (s.indexOf("Connecting") === 0) return colAccent
+                if (s.indexOf("No data") === 0) return "#e84040"
+                return colLabel
+            }
         }
         Text {
             anchors.centerIn: parent
@@ -216,7 +233,7 @@ Rectangle {
         background: Rectangle { color: colPanel; radius: 0; border.color: colAccent; border.width: 1 }
         Column {
             spacing: 12; width: parent.width
-            Text { text: "[ SETTINGS ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+            Text { text: "[ SETTINGS ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
             Rectangle {
                 width: parent.width; height: 220; color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1
                 ListView {
@@ -227,7 +244,7 @@ Rectangle {
                         text: modelData; color: colAccent; font.pixelSize: 11; font.family: monoFont
                         wrapMode: Text.Wrap
                     }
-                    onCountChanged: positionViewAtEnd()
+                    onCountChanged: Qt.callLater(positionViewAtEnd)
                 }
             }
             Rectangle {
@@ -243,8 +260,45 @@ Rectangle {
     // ── 로그 모델 ──
     ListModel { id: logModel }
     function appendLog(msg) {
-        logModel.append({"modelData": msg})
+        logModel.append({"modelData": formatLog(msg)})
         if (logModel.count > 100) logModel.remove(0)
+    }
+    function formatLog(msg) {
+        // JSON 메시지 감지 및 포맷
+        var idx = msg.indexOf('{')
+        if (idx < 0) return msg
+        try {
+            var prefix = msg.substring(0, idx).trim()
+            var obj = JSON.parse(msg.substring(idx))
+            var t = obj.t !== undefined ? obj.t : "?"
+            var ev = obj.event || "?"
+            var detail = obj.detail || ""
+            var lines = "[" + t + "] " + ev + ": " + detail
+            // 주요 상태 표시
+            var state = []
+            if (obj.wheelState !== undefined) state.push("wheel=" + obj.wheelState)
+            if (obj.balancing !== undefined)  state.push("bal=" + (obj.balancing ? "ON" : "OFF"))
+            if (obj.targetRPM !== undefined)  state.push("RPM=" + obj.targetRPM)
+            if (obj.targetGimbal !== undefined) state.push("gimbal=" + obj.targetGimbal)
+            if (state.length > 0) lines += "\n  " + state.join("  ")
+            // 통신 상태 (변경 이벤트일 때만)
+            if (obj.event === "comm" || obj.event === "init") {
+                var c = obj.comm
+                if (c) {
+                    var sensors = []
+                    if (c.angleSensor) sensors.push("angle"); else sensors.push("!angle")
+                    if (c.rpmSensor1) sensors.push("rpm1"); else sensors.push("!rpm1")
+                    if (c.rpmSensor2) sensors.push("rpm2"); else sensors.push("!rpm2")
+                    if (c.wheelMotor) sensors.push("wheel"); else sensors.push("!wheel")
+                    if (c.gimbalMotor) sensors.push("gimbal"); else sensors.push("!gimbal")
+                    if (c.mainLoop) sensors.push("main"); else sensors.push("!main")
+                    lines += "\n  comm: " + sensors.join(" ")
+                }
+            }
+            return prefix ? (prefix + "\n" + lines) : lines
+        } catch(e) {
+            return msg  // JSON 파싱 실패 → 원본 그대로
+        }
     }
 
     // ══════════════════════════════════════
@@ -255,7 +309,7 @@ Rectangle {
         x: 8; y: 56
         width: (parent.width - 24) * 0.66
         height: parent.height - 62
-        label: Text { text: "[ REALTIME GRAPH ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        label: Text { text: "[ REALTIME GRAPH ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
         background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         GridLayout {
@@ -310,12 +364,12 @@ Rectangle {
         id: mainLoopBox
         x: 1270; y: 56
         width: 640; height: 90
-        label: Text { text: "[ MAIN LOOP ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        label: Text { text: "[ MAIN LOOP ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
         background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Row {
             anchors.fill: parent; spacing: 8
-            Text { text: "MAIN_LOOP"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: "MAIN_LOOP"; font.pixelSize: 20; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
             Row {
                 spacing: 0; anchors.verticalCenter: parent.verticalCenter
                 TextField {
@@ -359,7 +413,7 @@ Rectangle {
                 color: root.lampMainLoop ? colLampOn : colLampOff
                 anchors.verticalCenter: parent.verticalCenter
             }
-            Text { text: "BAUD"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: "BAUD"; font.pixelSize: 20; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
             Row {
                 spacing: 0; anchors.verticalCenter: parent.verticalCenter
                 TextField {
@@ -402,19 +456,19 @@ Rectangle {
         id: sensorBox
         x: 1270; y: 152
         width: 640; height: 122
-        label: Text { text: "[ SENSOR DATA ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        label: Text { text: "[ SENSOR DATA ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
         background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Grid {
             anchors.fill: parent; columns: 4; rowSpacing: 10; columnSpacing: 15
-            Text { text: "Roll Angle"; font.pixelSize: 18; font.family: monoFont; width: 130; color: colLabel }
-            Text { text: rollAngleValue.toFixed(1) + " \u00B0"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 100; horizontalAlignment: Text.AlignRight; color: colAccent }
-            Text { text: "Wheel RPM1"; font.pixelSize: 18; font.family: monoFont; width: 140; color: colLabel }
-            Text { text: (serialManager ? serialManager.wheel1Rpm : 0) + " rpm"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 120; horizontalAlignment: Text.AlignRight; color: colAccent }
-            Text { text: "Gimbal Angle"; font.pixelSize: 18; font.family: monoFont; width: 130; color: colLabel }
-            Text { text: gimbalAngleValue.toFixed(1) + " \u00B0"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 100; horizontalAlignment: Text.AlignRight; color: colAccent }
-            Text { text: "Wheel RPM2"; font.pixelSize: 18; font.family: monoFont; width: 140; color: colLabel }
-            Text { text: (serialManager ? serialManager.wheel2Rpm : 0) + " rpm"; font.pixelSize: 20; font.bold: true; font.family: monoFont; width: 120; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Roll Angle"; font.pixelSize: 20; font.family: monoFont; width: 140; color: colLabel }
+            Text { text: rollAngleValue.toFixed(1) + " \u00B0"; font.pixelSize: 22; font.bold: true; font.family: monoFont; width: 100; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Wheel RPM1"; font.pixelSize: 20; font.family: monoFont; width: 150; color: colLabel }
+            Text { text: (serialManager ? serialManager.wheel1Rpm : 0) + " rpm"; font.pixelSize: 22; font.bold: true; font.family: monoFont; width: 120; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Gimbal Angle"; font.pixelSize: 20; font.family: monoFont; width: 140; color: colLabel }
+            Text { text: gimbalAngleValue.toFixed(1) + " \u00B0"; font.pixelSize: 22; font.bold: true; font.family: monoFont; width: 100; horizontalAlignment: Text.AlignRight; color: colAccent }
+            Text { text: "Wheel RPM2"; font.pixelSize: 20; font.family: monoFont; width: 150; color: colLabel }
+            Text { text: (serialManager ? serialManager.wheel2Rpm : 0) + " rpm"; font.pixelSize: 22; font.bold: true; font.family: monoFont; width: 120; horizontalAlignment: Text.AlignRight; color: colAccent }
         }
     }
 
@@ -423,14 +477,14 @@ Rectangle {
         id: controlBox
         x: 1270; y: 280
         width: 640; height: 148
-        label: Text { text: "[ CONTROL SYSTEM ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        label: Text { text: "[ CONTROL SYSTEM ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
         background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Column {
             anchors.fill: parent; spacing: 10
             Row {
                 id: controlRow1; spacing: 10
-                Text { text: "WHEEL RPM"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "WHEEL RPM"; font.pixelSize: 20; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
                     spacing: 0; anchors.verticalCenter: parent.verticalCenter
                     TextField {
@@ -454,7 +508,7 @@ Rectangle {
                     }
                 }
                 Item { width: 15; height: 1 }
-                Text { text: "CTRL_FACTOR"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "CTRL_FACTOR"; font.pixelSize: 20; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 TextField {
                     width: 75; height: 40; text: "2.5"; font.pixelSize: 20; font.family: monoFont; horizontalAlignment: Text.AlignHCenter
                     color: colAccent
@@ -462,8 +516,8 @@ Rectangle {
                 }
             }
             Item {
-                width: controlRow1.implicitWidth; height: 45
-                Text { id: dataFileLabel; text: "DATA FILE"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+                width: parent.width; height: 45
+                Text { id: dataFileLabel; text: "DATA FILE"; font.pixelSize: 20; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Rectangle {
                     id: startBtn
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
@@ -472,7 +526,7 @@ Rectangle {
                     color: root.isRunning
                         ? (startBtnArea.pressed ? "#8b0000" : "#b22222")
                         : (startBtnArea.pressed ? "#c48800" : colBtn)
-                    Text { anchors.centerIn: parent; text: root.isRunning ? "STOP" : "START"; font.pixelSize: 18; font.bold: true; font.family: monoFont; font.letterSpacing: 2; color: root.isRunning ? "#fff" : colAccent }
+                    Text { anchors.centerIn: parent; text: root.isRunning ? "STOP" : "START"; font.pixelSize: 20; font.bold: true; font.family: monoFont; font.letterSpacing: 2; color: root.isRunning ? "#fff" : colAccent }
                     MouseArea {
                         id: startBtnArea; anchors.fill: parent
                         onClicked: {
@@ -517,7 +571,7 @@ Rectangle {
         id: perfBox
         x: 1270; y: 434
         width: 640; height: 141
-        label: Text { text: "[ PERFORMANCE ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        label: Text { text: "[ PERFORMANCE ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
         background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Column {
@@ -593,7 +647,7 @@ Rectangle {
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
-                Text { text: "GIMBAL RESET GAIN"; font.pixelSize: 18; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "GIMBAL RESET GAIN"; font.pixelSize: 20; font.family: monoFont; color: colLabel; anchors.verticalCenter: parent.verticalCenter }
                 Row {
                     spacing: 0
                     TextField {
@@ -624,14 +678,14 @@ Rectangle {
         id: torqueBox
         x: 1270; y: 581
         width: 640; height: 493
-        label: Text { text: "[ TORQUE TREND ]"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colAccent }
+        label: Text { text: "[ TORQUE TREND ]"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colAccent }
         background: Rectangle { color: colPanel; radius: 0; border.color: colInputBorder; border.width: 1 }
 
         Item {
             anchors.fill: parent
             Row {
                 anchors.top: parent.top; anchors.right: parent.right; spacing: 8; z: 1
-                Text { text: "TORQUE"; font.pixelSize: 18; font.bold: true; font.family: monoFont; color: colLabel }
+                Text { text: "TORQUE"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: colLabel }
                 Text { text: torqueValue.toFixed(2) + " Nm"; font.pixelSize: 22; font.bold: true; font.family: monoFont; color: "#e84040" }
             }
             ChartView {

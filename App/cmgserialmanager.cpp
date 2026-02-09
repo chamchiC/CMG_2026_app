@@ -14,6 +14,7 @@ CMGSerialManager::CMGSerialManager(QObject *parent)
     : QObject(parent)
     , m_serial(new QSerialPort(this))
     , m_reconnectTimer(new QTimer(this))
+    , m_dataTimeoutTimer(new QTimer(this))
 {
     connect(m_serial, &QSerialPort::readyRead,
             this, &CMGSerialManager::onReadyRead);
@@ -24,6 +25,12 @@ CMGSerialManager::CMGSerialManager(QObject *parent)
     m_reconnectTimer->setInterval(2000);
     connect(m_reconnectTimer, &QTimer::timeout,
             this, &CMGSerialManager::tryReconnect);
+
+    // 데이터 수신 감시 타이머: 3초 내 유효 데이터 없으면 경고
+    m_dataTimeoutTimer->setInterval(3000);
+    m_dataTimeoutTimer->setSingleShot(true);
+    connect(m_dataTimeoutTimer, &QTimer::timeout,
+            this, &CMGSerialManager::onDataTimeout);
 
     refreshPorts();
     qWarning() << "CMGSerialManager: initialized, ports:" << m_ports;
@@ -41,7 +48,20 @@ CMGSerialManager::~CMGSerialManager()
 
 bool CMGSerialManager::connected() const
 {
-    return m_serial->isOpen();
+    return m_serial->isOpen() && m_dataReceived;
+}
+
+QString CMGSerialManager::connectionStatus() const
+{
+    return m_connectionStatus;
+}
+
+void CMGSerialManager::setConnectionStatus(const QString &status)
+{
+    if (m_connectionStatus != status) {
+        m_connectionStatus = status;
+        emit connectionChanged();
+    }
 }
 
 QStringList CMGSerialManager::availablePorts() const
@@ -81,17 +101,22 @@ void CMGSerialManager::connectPort(const QString &portName, int baudRate)
     m_serial->setFlowControl(QSerialPort::NoFlowControl);
 
     if (m_serial->open(QIODevice::ReadWrite)) {
+        // 시리얼 입출력 버퍼 클리어 (잔여 데이터 방지)
+        m_serial->clear();
         stopReconnectTimer();
         m_buffer.clear();
         m_asciiCarry.clear();
         m_packetCount = 0;
         m_checksumFails = 0;
         m_totalBytesReceived = 0;
-        qWarning() << "CMGSerialManager: Connected to" << portName << "@" << baudRate;
-        emit connectionChanged();
-        emit logReceived("Connected: " + portName + " @ " + QString::number(baudRate));
+        m_dataReceived = false;
+        qWarning() << "CMGSerialManager: Port opened:" << portName << "@" << baudRate;
+        setConnectionStatus("Connecting: " + portName + " @ " + QString::number(baudRate));
+        emit logReceived("Connecting: " + portName + " @ " + QString::number(baudRate));
+        m_dataTimeoutTimer->start();  // 3초 후 데이터 없으면 경고
     } else {
         qWarning() << "CMGSerialManager: FAILED to open" << portName << "-" << m_serial->errorString();
+        setConnectionStatus("Failed: " + m_serial->errorString());
         emit logReceived("Connection failed: " + m_serial->errorString());
         startReconnectTimer();
     }
@@ -102,13 +127,15 @@ void CMGSerialManager::disconnectPort()
     // 수동 해제 → 자동 재연결 비활성화
     m_autoReconnect = false;
     stopReconnectTimer();
+    m_dataTimeoutTimer->stop();
 
     if (m_serial->isOpen()) {
         m_serial->close();
         m_buffer.clear();
         m_asciiCarry.clear();
+        m_dataReceived = false;
         qDebug() << "CMGSerialManager: Disconnected";
-        emit connectionChanged();
+        setConnectionStatus("Disconnected");
         emit logReceived("Disconnected");
     }
 }
@@ -236,9 +263,21 @@ void CMGSerialManager::onErrorOccurred(QSerialPort::SerialPortError error)
         m_serial->close();
         m_buffer.clear();
         m_asciiCarry.clear();
-        emit connectionChanged();
+        m_dataReceived = false;
+        m_dataTimeoutTimer->stop();
+        setConnectionStatus("Device lost — reconnecting...");
         emit logReceived("Device lost — reconnecting...");
         startReconnectTimer();
+    }
+}
+
+void CMGSerialManager::onDataTimeout()
+{
+    // 포트는 열렸지만 유효 데이터가 3초간 없음
+    if (m_serial->isOpen() && !m_dataReceived) {
+        qWarning() << "CMGSerialManager: No valid data received — check wiring";
+        setConnectionStatus("No data — check wiring (" + m_lastPortName + ")");
+        emit logReceived("No data received — check wiring or port");
     }
 }
 
@@ -373,6 +412,14 @@ void CMGSerialManager::processBuffer()
                 m_packetCount++;
                 parseTelemetryPacket(packet);
                 m_buffer = m_buffer.mid(PACKET_SIZE);
+
+                // 첫 유효 패킷 수신 → 연결 확정
+                if (!m_dataReceived) {
+                    m_dataReceived = true;
+                    m_dataTimeoutTimer->stop();
+                    setConnectionStatus("Connected: " + m_lastPortName + " @ " + QString::number(m_lastBaudRate));
+                    emit logReceived("Connected: " + m_lastPortName + " @ " + QString::number(m_lastBaudRate));
+                }
 
                 if (m_packetCount <= 3 || m_packetCount % 500 == 0)
                     qWarning() << "PKT #" << m_packetCount
@@ -579,6 +626,7 @@ void CMGSerialManager::tryReconnect()
     m_serial->setFlowControl(QSerialPort::NoFlowControl);
 
     if (m_serial->open(QIODevice::ReadWrite)) {
+        m_serial->clear();
         stopReconnectTimer();
         m_lastPortName = targetPort;
         m_buffer.clear();
@@ -586,9 +634,11 @@ void CMGSerialManager::tryReconnect()
         m_packetCount = 0;
         m_checksumFails = 0;
         m_totalBytesReceived = 0;
-        qWarning() << "CMGSerialManager: Reconnected to" << targetPort << "@" << m_lastBaudRate;
-        emit connectionChanged();
-        emit logReceived("Reconnected: " + targetPort + " @ " + QString::number(m_lastBaudRate));
+        m_dataReceived = false;
+        qWarning() << "CMGSerialManager: Port reopened:" << targetPort << "@" << m_lastBaudRate;
+        setConnectionStatus("Connecting: " + targetPort + " @ " + QString::number(m_lastBaudRate));
+        emit logReceived("Connecting: " + targetPort + " @ " + QString::number(m_lastBaudRate));
+        m_dataTimeoutTimer->start();
     } else {
         qDebug() << "CMGSerialManager: Reconnect failed -" << m_serial->errorString();
         // 타이머 계속 → 다음 주기에 재시도

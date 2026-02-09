@@ -23,6 +23,7 @@ class CMGSerialManager : public QObject
 
     // ── Connection ──
     Q_PROPERTY(bool connected READ connected NOTIFY connectionChanged)
+    Q_PROPERTY(QString connectionStatus READ connectionStatus NOTIFY connectionChanged)
     Q_PROPERTY(QStringList availablePorts READ availablePorts NOTIFY portsChanged)
 
     // ── Telemetry: IMU ──
@@ -73,6 +74,7 @@ public:
 
     // ── Property Getters ──
     bool connected() const;
+    QString connectionStatus() const;
     QStringList availablePorts() const;
 
     double roll()   const;
@@ -140,6 +142,7 @@ private slots:
     void onReadyRead();
     void onErrorOccurred(QSerialPort::SerialPortError error);
     void tryReconnect();
+    void onDataTimeout();
 
 private:
     void sendCommand(const QString &cmd);
@@ -148,6 +151,7 @@ private:
     void processAsciiLine(const QString &line);
     void startReconnectTimer();
     void stopReconnectTimer();
+    void setConnectionStatus(const QString &status);
 
     QSerialPort *m_serial;
     QByteArray   m_buffer;
@@ -158,6 +162,11 @@ private:
     QString      m_lastPortName;
     int          m_lastBaudRate = 115200;
     bool         m_autoReconnect = false;   // connectPort 호출 후 활성화
+
+    // ── 연결 상태 감시 ──
+    QTimer      *m_dataTimeoutTimer = nullptr;
+    QString      m_connectionStatus = "Disconnected";
+    bool         m_dataReceived = false;     // 유효 패킷/ASCII 수신 여부
 
     // ── 텔레메트리 패킷 구조 (110 bytes, Little-endian) ──
     struct TelemetryData {
