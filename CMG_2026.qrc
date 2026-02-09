@@ -1,0 +1,16 @@
+<RCC>
+    <qresource>
+        <file>CMG_2026.qmlproject</file>
+        <file>CMG_2026/Constants.qml</file>
+        <file>CMG_2026/EventListModel.qml</file>
+        <file>CMG_2026/EventListSimulator.qml</file>
+        <file>CMG_2026/qmldir</file>
+        <file>CMG_2026Content/App.qml</file>
+        <file>CMG_2026Content/ChartDemo.qml</file>
+        <file>CMG_2026Content/CMGController.qml</file>
+        <file>CMG_2026Content/CMGMainView.qml</file>
+        <file>CMG_2026Content/GraphInputDemo.qml</file>
+        <file>CMG_2026Content/Screen01.ui.qml</file>
+        <file>qtquickcontrols2.conf</file>
+    </qresource>
+</RCC>

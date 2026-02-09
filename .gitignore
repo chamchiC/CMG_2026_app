@@ -1,0 +1,22 @@
+# Qt Build directories
+CMG_2026App-Release/
+CMG_2026App-Debug/
+build/
+build-*/
+
+# Qt Creator user files
+*.user
+*.user.*
+
+# Generated files
+Generated/
+*.autosave
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
