@@ -1,10 +1,6 @@
 
 target_sources(${CMAKE_PROJECT_NAME} PUBLIC
     "main.cpp"
-    "filelogger.h"
-    "filelogger.cpp"
-    "serialporthelper.h"
-    "serialporthelper.cpp"
     "cmgserialmanager.h"
     "cmgserialmanager.cpp"
 )

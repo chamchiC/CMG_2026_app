@@ -48,12 +48,8 @@ Rectangle {
     property bool lampStandard: false
     property bool lampPerformance: false
 
-    // ── 앱 시작 시 자동 시리얼 연결 + 데이터 폴더 생성 ──
+    // ── 앱 시작 시 자동 시리얼 연결 ──
     Component.onCompleted: {
-        // 데이터 폴더 생성 (fileLogger.ensureDataFolder → C++에서 처리)
-        if (fileLogger)
-            fileLogger.ensureDataFolder()
-
         if (serialManager) {
             serialManager.refreshPorts()
             var ports = serialManager.availablePorts
@@ -80,6 +76,9 @@ Rectangle {
             root.lampWheelMotor  = (serialManager.commBits & 0x08) !== 0
             root.lampGimbalMotor = (serialManager.commBits & 0x10) !== 0
             root.lampMainLoop    = (serialManager.commBits & 0x20) !== 0
+            root.lampStable      = Math.abs(serialManager.roll) < 2.0
+            root.lampStandard    = serialManager.balancing
+            root.lampPerformance = serialManager.wheelState === 1
         }
         function onLogReceived(message) {
             var formatted = formatLog(message)
@@ -135,13 +134,6 @@ Rectangle {
             autoScaleY(rollVelAxisY, rollVelocityValue)
             autoScaleY(gimbalVelAxisY, gimbalVelocityValue)
             autoScaleY(torqueAxisY, torqueValue)
-            if (fileLogger) {
-                fileLogger.appendData("RollAngle", t, rollAngleValue)
-                fileLogger.appendData("GimbalAngle", t, gimbalAngleValue)
-                fileLogger.appendData("RollVelocity", t, rollVelocityValue)
-                fileLogger.appendData("GimbalVelocity", t, gimbalVelocityValue)
-                fileLogger.appendData("Torque", t, torqueValue)
-            }
             if (rollAngleSeries.count > maxPoints) {
                 rollAngleSeries.remove(0); gimbalAngleSeries.remove(0)
                 rollVelocitySeries.remove(0); gimbalVelocitySeries.remove(0)
@@ -159,8 +151,9 @@ Rectangle {
     }
 
     onIsRunningChanged: {
-        if (fileLogger) {
-            if (isRunning) fileLogger.startSession(); else fileLogger.endSession()
+        if (serialManager) {
+            if (isRunning) serialManager.startRecording(dataFileField.text)
+            else serialManager.stopRecording()
         }
     }
 
@@ -648,7 +641,7 @@ Rectangle {
                     anchors.right: browseBtn.left; anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
                     height: 40; font.pixelSize: 14; font.family: monoFont; horizontalAlignment: Text.AlignLeft
-                    text: fileLogger ? fileLogger.dataFolderPath() : ""
+                    text: serialManager ? serialManager.dataFolderPath() : ""
                     color: colText; readOnly: true
                     background: Rectangle { color: colInputBg; radius: 0; border.color: colInputBorder; border.width: 1 }
                 }

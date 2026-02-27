@@ -6,8 +6,6 @@
 #include <QQmlContext>
 
 #include "autogen/environment.h"
-#include "filelogger.h"
-#include "serialporthelper.h"
 #include "cmgserialmanager.h"
 
 int main(int argc, char *argv[])
@@ -16,14 +14,6 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     QQmlApplicationEngine engine;
-
-    // FileLogger를 QML에 노출
-    FileLogger fileLogger;
-    engine.rootContext()->setContextProperty("fileLogger", &fileLogger);
-
-    // SerialPortHelper를 QML에 노출
-    SerialPortHelper serialPortHelper;
-    engine.rootContext()->setContextProperty("serialPortHelper", &serialPortHelper);
 
     // CMGSerialManager를 QML에 노출 (시리얼 통신 + 텔레메트리 파싱)
     CMGSerialManager serialManager;

@@ -1,5 +1,6 @@
 #include "cmgserialmanager.h"
 #include <QDebug>
+#include <QStandardPaths>
 #include <cstring>
 
 static const quint8 MAGIC_BYTE_1 = 0xAA;
@@ -655,6 +656,12 @@ void CMGSerialManager::stopRecording()
 bool CMGSerialManager::isRecording() const
 {
     return m_recording;
+}
+
+QString CMGSerialManager::dataFolderPath() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+           + "/CMG_2026_app/data";
 }
 
 // ═══════════════════════════════════════════════

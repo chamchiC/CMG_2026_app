@@ -18,23 +18,4 @@ Window {
         anchors.fill: parent
     }
 
-    // ── 두 번째 창: 컨트롤러 (비활성화 - serialManager로 대체) ──
-    Window {
-        id: controllerWindow
-        width: 500
-        height: 750
-        visible: false  // 시리얼 통신으로 대체됨
-        title: "CMG - Graph Controller"
-        x: 50
-        y: 50
-
-        CMGController {
-            id: controllerView
-            anchors.fill: parent
-
-            onStartClicked: mainView.isRunning = true
-            onStopClicked: mainView.isRunning = false
-            onResetClicked: mainView.resetAll()
-        }
-    }
 }

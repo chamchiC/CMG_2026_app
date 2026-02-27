@@ -14,7 +14,6 @@ qt6_add_qml_module(CMG_2026Content
         "ChartDemo.qml"
         "GraphInputDemo.qml"
         "CMGMainView.qml"
-        "CMGController.qml"
 )
 
 

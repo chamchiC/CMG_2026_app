@@ -139,6 +139,7 @@ public:
     Q_INVOKABLE void startRecording(const QString &folderPath);
     Q_INVOKABLE void stopRecording();
     Q_INVOKABLE bool isRecording() const;
+    Q_INVOKABLE QString dataFolderPath() const;
 
 signals:
     void connectionChanged();
